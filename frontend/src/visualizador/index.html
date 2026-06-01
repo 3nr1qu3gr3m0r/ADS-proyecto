@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0">
+
+    <title>EPiC Playground</title>
+    <h1>PRUEBA HTML</h1>
+
+    <link
+        rel="stylesheet"
+        href="styles.css">
+
+</head>
+
+<body>
+
+<header>
+
+    <h1>EPiC Playground</h1>
+
+    <div class="estado-general">
+
+        <span class="estado-dot"></span>
+
+        Simulación ACTIVA
+
+    </div>
+
+</header>
+
+<main>
+
+    <section class="contenedor-grafo">
+
+        <canvas
+            id="canvas"
+            width="1000"
+            height="600">
+        </canvas>
+
+    </section>
+
+    <aside class="panel-derecho">
+
+        <div class="card">
+
+            <h2>Estado</h2>
+
+            <p>
+                Fase:
+                <span id="fase">
+                    Corriendo
+                </span>
+            </p>
+
+            <p>
+                Paso:
+                <span id="paso">
+                    0
+                </span>
+            </p>
+
+            <p>
+                Iteraciones:
+                <span id="iteraciones">
+                    0
+                </span>
+            </p>
+
+            <p>
+                Error:
+                <span id="error">
+                    0.000
+                </span>
+            </p>
+
+        </div>
+
+        <div class="card">
+
+            <h2>Leyenda</h2>
+
+            <div class="leyenda-item">
+
+                <span class="color azul"></span>
+
+                Bajo
+
+            </div>
+
+            <div class="leyenda-item">
+
+                <span class="color verde"></span>
+
+                Medio
+
+            </div>
+
+            <div class="leyenda-item">
+
+                <span class="color naranja"></span>
+
+                Alto
+
+            </div>
+
+            <div class="leyenda-item">
+
+                <span class="color rojo"></span>
+
+                Crítico
+
+            </div>
+
+        </div>
+
+    </aside>
+
+</main>
+
+<section class="controles">
+
+    <button id="btnPlay">
+        ▶ Play
+    </button>
+
+    <button id="btnPause">
+        ⏸ Pause
+    </button>
+
+    <button id="btnPaso">
+        ⏭ Paso
+    </button>
+
+    <button id="btnReset">
+        🔄 Reiniciar
+    </button>
+
+</section>
+
+<section class="historial">
+
+    <h2>
+        Historial de Eventos
+    </h2>
+
+    <ul id="listaEventos"></ul>
+
+</section>
+
+<script type="module" src="main.js"></script>
+
+</body>
+
+</html>
