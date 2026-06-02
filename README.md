@@ -138,23 +138,19 @@ El frontend la usa en `compartido/dominio/tipos.ts` y el backend en `compartido/
 ```json
 {
   "id": "nodo-001",
-  "tipo": "fuente",
+  "tipo": "AND",
   "etiqueta": "Nodo A",
   "propiedades": {
-    "capacidad": 100.0,
-    "resistencia": 0.5
+    "entradas": 2,
   },
-  "posicion": {
-    "x": 120,
-    "y": 340
-  }
+  "posicion": {"x": 120, "y": 340}
 }
 ```
 
 | Campo | Tipo | Descripción |
 |-------|------|-------------|
 | `id` | `string` | Identificador único. Formato: `"nodo-{número}"` |
-| `tipo` | `"fuente" \| "sumidero" \| "intermedio"` | Rol del nodo en la red |
+| `tipo` | `"AND" \| "OR" \| "NOT"` | Rol del nodo en la red |
 | `etiqueta` | `string` | Nombre visible en el editor |
 | `propiedades` | `objeto clave:número` | Valores específicos del dominio |
 | `posicion.x` | `número` | Posición horizontal en el canvas |
