@@ -1,0 +1,1 @@
+# backend/compartido/dominio/__init__.py
