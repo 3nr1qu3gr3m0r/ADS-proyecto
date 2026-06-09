@@ -87,18 +87,24 @@ ADS-proyecto/
 │   │   └── utilidades.py             → generar_id(), formatear_resultado(), redondear()
 │   │
 │   ├── motor/                        → 🔴 SUBEQUIPO 2
-│   │   ├── servicios/
-│   │   │   ├── propagacion_servicio.py   → calcular_propagacion(), orquesta el algoritmo
-│   │   │   └── construccion_matriz.py    → construir_matriz_adyacencia(), normalizar()
-│   │   ├── algoritmos/
-│   │   │   ├── gauss_seidel.py       → Implementa IMotorCalculo con Gauss-Seidel
-│   │   │   └── jacobi.py             → Implementa IMotorCalculo con método Jacobi
+│   │   ├── principal.py                    → FastAPI entrypoint (uvicorn motor.principal:app)
+│   │   ├── network.json                    → ejemplo de red lógica
+│   │   ├── dominio/
+│   │   │   └── modelos.py                  → Variable, Connective, EPiCModel, PropagationState
 │   │   ├── api/
-│   │   │   ├── rutas.py              → POST /api/v1/redes/{id}/calcular
-│   │   │   └── esquemas.py           → Pydantic: EntradaCalculo, SalidaCalculo
+│   │   │   ├── rutas.py                    → POST /api/v1/redes/{id}/calcular
+│   │   │   └── esquemas.py                 → Pydantic: EntradaCalculo
+│   │   ├── servicios/
+│   │   │   ├── propagacion_servicio.py     → calcular_propagacion(), orquesta EPiCAdapter + EPiCEngine
+│   │   │   └── construccion_matriz.py      → EPiCAdapter.network_to_model(), VisualizerAdapter.build_result()
+│   │   ├── algoritmos/
+│   │   │   ├── engine.py                   → EPiCEngine con worklist propagation (NEG, IMP, AND, OR)
+│   │   │   ├── constantes.py               → Dominio 4-valor {N, T, F, B}
+│   │   │   └── tablas.py                   → NEG_TABLE, IMP_TABLE, AND_TABLE, OR_TABLE
 │   │   └── pruebas/
-│   │       ├── test_propagacion_servicio.py
-│   │       └── test_gauss_seidel.py
+│   │       ├── test_engine.py              → Tests 8–13 (cadena, silogismo, De Morgan, dilemma, médico)
+│   │       ├── test_propagacion_servicio.py→ Tests 1–7 (modus ponens, tollens, negación, etc.)
+│   │       └── exportar_json.py            → Ejecuta tests y exporta resultados a JSON
 │   │
 │   ├── simulador/                    → 🔵 SUBEQUIPO 3
 │   │   ├── servicios/
