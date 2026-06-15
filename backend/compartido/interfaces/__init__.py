@@ -1,0 +1,1 @@
+# backend/compartido/interfaces/__init__.py
