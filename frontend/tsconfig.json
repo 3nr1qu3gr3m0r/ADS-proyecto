@@ -1,0 +1,28 @@
+// ============ PROMPT ============
+// Configura TypeScript en modo estricto completo para Vite + React 18:
+// target ES2022, JSX react-jsx, bundler module resolution, sin emisión,
+// verificación de variables y parámetros no usados, e indexado estricto.
+// ======== FIN DEL PROMPT ========
+
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src"]
+}

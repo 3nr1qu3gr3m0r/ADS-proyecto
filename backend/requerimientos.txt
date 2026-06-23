@@ -1,0 +1,10 @@
+# ============ PROMPT ============
+# Lista las dependencias Python del backend: FastAPI para la API REST,
+# Uvicorn como servidor ASGI, Pydantic para validación de esquemas y
+# Pytest para testing del motor de propagación y el simulador.
+# ======== FIN DEL PROMPT ========
+
+fastapi
+uvicorn[standard]
+pydantic
+pytest
