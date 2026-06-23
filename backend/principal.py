@@ -1,11 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from simulador.api.rutas import router
+from motor.api import router as router_motor
+from simulador.api import router as router_simulador
 
-app = FastAPI(
-    title="ADS Simulador"
-)
+app = FastAPI(title="ADS — Motor + Simulador de Propagación Matricial", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -15,4 +14,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router)
+app.include_router(router_motor)
+app.include_router(router_simulador)
+
+
+@app.get("/")
+def raiz():
+    return {"status": "ok", "docs": "/docs"}

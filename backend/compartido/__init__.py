@@ -1,1 +1,0 @@
-# backend/compartido/__init__.py
