@@ -10,7 +10,7 @@ from enum import Enum
 
 from compartido.modelos import Red, ResultadoPropagacion
 
-TIPOS_OPERADOR = {"AND", "OR", "XOR", "NOT", "IMP"}
+TIPOS_OPERADOR = {"AND", "OR", "XOR", "NOT", "IMP", "MT"}
 VALORES_BELNAP = {"T", "F", "B", "N"}
 
 

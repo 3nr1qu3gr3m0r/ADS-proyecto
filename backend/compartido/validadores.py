@@ -169,5 +169,16 @@ def validar_red(red: Red) -> list[ErrorValidacion]:
                 ),
                 nodo_id=nodo.id,
             ))
+        if nodo.tipo == "MT" and entradas_por_nodo[nodo.id] != 2:
+            errores.append(ErrorValidacion(
+                codigo="MT_ENTRADAS_INVALIDAS",
+                mensaje=(
+                    f'El nodo MT "{nodo.id}" necesita exactamente 2 entradas '
+                    f'(1ª: la implicación A→B; 2ª: el consecuente negado ¬B); '
+                    f'tiene {entradas_por_nodo[nodo.id]}. '
+                    'Produce como salida el antecedente negado ¬A.'
+                ),
+                nodo_id=nodo.id,
+            ))
 
     return errores

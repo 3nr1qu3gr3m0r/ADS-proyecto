@@ -72,6 +72,25 @@ IMP_TABLE: dict[tuple[str, str], str] = {
     ("N","T"):"T", ("N","F"):"N", ("N","B"):"T", ("N","N"):"N",
 }
 
+MT_TABLE: dict[tuple[str, str], str] = {
+    # MT(p, q) — Modus Tollens como backward propagation UI⁻ del paper EPiC
+    # p = valor de la implicación (A→B)
+    # q = valor del CONSECUENTE (B)    ← conectar B directamente, NO ¬B
+    # resultado = valor del ANTECEDENTE (A)
+    #
+    # Caso clásico del paper (paso 7, Figura 2):
+    #   MT(T, F) = F  →  si A→B=T y B=F, entonces A=F
+    # Después se aplica NOT para obtener ¬A (paso 8).
+    #
+    # Derivación (Proposición 8 del paper — UI⁻):
+    # P admisible cuando IMP(P,q) ∈ Future(p) = valores refinables desde p.
+    # Future(T)={T,B}, Future(B)={B}, etc.
+    ("N","N"):"N", ("N","T"):"N", ("N","F"):"N", ("N","B"):"N",
+    ("T","N"):"F", ("T","T"):"N", ("T","F"):"F", ("T","B"):"N",
+    ("F","N"):"N", ("F","T"):"N", ("F","F"):"T", ("F","B"):"T",
+    ("B","N"):"N", ("B","T"):"N", ("B","F"):"B", ("B","B"):"T",
+}
+
 MAX_ITERACIONES = 100
 
 
@@ -88,6 +107,11 @@ def aplicar_operador(tipo: str, entradas: list[str]) -> str:
     if tipo == "IMP":
         # Requiere exactamente 2: [antecedente, consecuente]
         return IMP_TABLE[(entradas[0], entradas[1])]
+
+    if tipo == "MT":
+        # Requiere exactamente 2: [valor de la implicación, valor del consecuente negado]
+        # Produce: valor del antecedente negado
+        return MT_TABLE[(entradas[0], entradas[1])]
 
     if tipo == "AND":
         resultado = entradas[0]

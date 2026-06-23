@@ -20,7 +20,7 @@ export interface Posicion {
 }
 
 export type ValorBelnap = 'T' | 'F' | 'B' | 'N';
-export type OperadorLogico = 'AND' | 'OR' | 'XOR' | 'NOT' | 'IMP';
+export type OperadorLogico = 'AND' | 'OR' | 'XOR' | 'NOT' | 'IMP' | 'MT';
 export type TipoNodo = 'premisa' | OperadorLogico;
 
 export interface PropiedadesNodo {

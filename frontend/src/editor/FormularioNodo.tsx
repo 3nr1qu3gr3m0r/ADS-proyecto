@@ -17,7 +17,8 @@ const OPERADORES: { op: OperadorLogico; desc: string }[] = [
   { op: 'OR',  desc: 'OR  — verdadero si al menos 1 entrada es T' },
   { op: 'AND', desc: 'AND — verdadero si TODAS las entradas son T' },
   { op: 'XOR', desc: 'XOR — verdadero si EXACTAMENTE 1 entrada es T' },
-  { op: 'IMP', desc: 'IMP — implicación a→b  (2 entradas: antecedente, consecuente)' },
+  { op: 'MT',  desc: 'MT — Modus Tollens: de (A→B) y ¬B produce ¬A  (2 entradas en orden)' },
+  { op: 'IMP', desc: 'IMP — Implicación a→b  (2 entradas: antecedente, consecuente)' },
   { op: 'NOT', desc: 'NOT — invierte la única entrada (requiere 1 entrada)' },
 ];
 

@@ -71,7 +71,13 @@ export function FormularioArista({ nodos, cantidadAristas, onAgregar }: Props) {
 
       {origenId && destinoId && nodos.find(n => n.id === destinoId)?.tipo === 'IMP' && (
         <div style={{ background: '#1e3a5f', borderRadius: 8, padding: '6px 10px', fontSize: 11, color: '#93c5fd' }}>
-          ℹ IMP usa el <strong>orden de conexión</strong>: la 1ª arista que llegue es el antecedente (a), la 2ª es el consecuente (b) → a → b
+          ℹ IMP: <strong>1ª arista = antecedente (a)</strong>, <strong>2ª = consecuente (b)</strong> → produce a → b
+        </div>
+      )}
+
+      {origenId && destinoId && nodos.find(n => n.id === destinoId)?.tipo === 'MT' && (
+        <div style={{ background: '#1e3a5f', borderRadius: 8, padding: '6px 10px', fontSize: 11, color: '#93c5fd' }}>
+          ℹ MT: <strong>1ª arista = la implicación (A→B)</strong>, <strong>2ª = el consecuente (B)</strong> → produce A
         </div>
       )}
 
