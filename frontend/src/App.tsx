@@ -13,8 +13,8 @@
  * iniciarSimulacion. No se necesita llamar a avanzar/retroceder en el
  * backend para moverse entre iteraciones; basta con mover pasoVisible.
  *
- * Por defecto se muestra el ÚLTIMO paso (resultado convergido), y el
- * usuario puede retroceder para ver cómo se propagaron los valores.
+ * Por defecto se muestra el PRIMER paso (estado inicial), y el
+ * usuario puede avanzar paso a paso para ver la propagación.
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -92,8 +92,8 @@ export default function App() {
     try {
       const res = await iniciarSimulacion(redActual());
       setSimulacion(res);
-      // ▶ Mostrar DIRECTAMENTE el último paso (resultado convergido)
-      setPasoVisible(res.historial.length - 1);
+      // ▶ Mostrar el primer paso (estado inicial antes de propagar)
+      setPasoVisible(0);
       setFase(res.historial[res.historial.length - 1]?.convergido ? 'completado' : 'error');
       setTab('resultados');
     } catch (e: unknown) {
