@@ -140,9 +140,9 @@ Casos clásicos: `T→T=T`, `T→F=F`, `F→T=T`, `F→F=T`.
 
 | Subequipo | Integrantes | Responsabilidad principal |
 |-----------|-------------|--------------------------|
-| **Subequipo 1** | 4 personas | Editor (frontend) |
-| **Subequipo 2** | 4 personas | Motor de cálculo (backend) |
-| **Subequipo 3** | 4 personas | Simulador (backend) |
+| **Subequipo 1** | De La Riva Martínez Héctor Josué<br>Bernal Linares César Arturo<br>Montaño Sánchez Daniela<br>García López Andrés Adad | Editor (Frontend) |
+| **Subequipo 2** | Cortés Avilez Yoshua<br>Gutiérrez López Samuel<br>Luciano Alvarado Ana Cristina<br>Pérez Montaño Sergio Patricio | Motor de cálculo (Backend) |
+| **Subequipo 3** | Aldama Nava Nadir Ibrain<br>Peralta Llera Elizabeth<br>Toribio Segura Alma Jessica<br>Varillas Figueroa Enrique Uriel | Simulador (Backend) |
 | **Todos** | 12 personas | Compartido · Visualizador |
 
 > Cualquier cambio en `backend/compartido/` o `frontend/src/compartido/` requiere revisión y aprobación de los **3 subequipos** antes de hacer merge.
