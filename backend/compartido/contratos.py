@@ -1,18 +1,13 @@
 """
-contratos.py — Interfaces, enumeraciones, eventos y excepciones compartidas.
+contratos.py — Interfaces, enumeraciones y excepciones compartidas.
 """
-
 from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-
 from compartido.modelos import Red, ResultadoPropagacion
 
-TIPOS_OPERADOR = {"AND", "OR", "XOR", "NOT", "IMP", "MT"}
-VALORES_BELNAP = {"T", "F", "B", "N"}
-
+TIPOS_ARISTA = {"and", "or", "not", "ui"}
 
 class FaseSimulacion(str, Enum):
     INACTIVO   = "inactivo"
@@ -21,66 +16,35 @@ class FaseSimulacion(str, Enum):
     COMPLETADO = "completado"
     ERROR      = "error"
 
-
 class IMotorCalculo(ABC):
-    """Contrato mínimo: dada una red, calcula su resultado final."""
-
     @abstractmethod
-    def calcular(self, red: Red) -> ResultadoPropagacion:
-        ...
-
+    def calcular(self, red: Red) -> ResultadoPropagacion: ...
 
 class IMotorCalculoIterativo(IMotorCalculo):
-    """
-    Extiende IMotorCalculo para exponer el detalle de cada iteración del
-    algoritmo de punto fijo sobre las tablas de verdad EPiC.
-    El Simulador depende de esta interfaz para mostrar la propagación paso a paso.
-    """
-
     @abstractmethod
-    def calcular_pasos(self, red: Red) -> list[ResultadoPropagacion]:
-        ...
-
+    def calcular_pasos(self, red: Red) -> list[ResultadoPropagacion]: ...
 
 class ISimulacion(ABC):
     @abstractmethod
-    def iniciar(self, red: Red) -> str:
-        ...
-
+    def iniciar(self, red: Red) -> str: ...
     @abstractmethod
-    def pausar(self) -> None:
-        ...
-
+    def pausar(self) -> None: ...
     @abstractmethod
-    def reanudar(self) -> None:
-        ...
-
+    def reanudar(self) -> None: ...
     @abstractmethod
-    def paso(self) -> None:
-        ...
-
+    def paso(self) -> None: ...
 
 @dataclass
 class RedActualizada:
-    tipo: str = "RedActualizada"
-    redId: str = ""
-
+    tipo: str = "RedActualizada"; redId: str = ""
 
 @dataclass
 class SimulacionIniciada:
-    tipo: str = "SimulacionIniciada"
-    redId: str = ""
-
+    tipo: str = "SimulacionIniciada"; redId: str = ""
 
 @dataclass
 class ErrorCalculo:
-    tipo: str = "ErrorCalculo"
-    mensaje: str = ""
+    tipo: str = "ErrorCalculo"; mensaje: str = ""
 
-
-class RedInvalidaError(Exception):
-    pass
-
-
-class ConvergenciaError(Exception):
-    pass
+class RedInvalidaError(Exception): pass
+class ConvergenciaError(Exception): pass

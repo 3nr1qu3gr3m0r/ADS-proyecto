@@ -1,123 +1,129 @@
-"""
-test_motor.py — Tests del Motor de tablas EPiC.
-Verifica que las tablas de verdad se aplican correctamente.
-"""
-
+"""test_motor.py — Tests del nuevo motor de propagación por bits."""
 import pytest
 from compartido.modelos import Red, Nodo, Arista
-from motor.algoritmos import obtener_motor, aplicar_operador, NEG_TABLE, AND_TABLE, OR_TABLE, XOR_TABLE
+from motor.algoritmos import obtener_motor, has_pos, has_neg, add_pos, add_neg
 
+def _red(*nodos_args, aristas_args=None):
+    nodos   = [Nodo(**a) for a in nodos_args]
+    aristas = [Arista(**a) for a in (aristas_args or [])]
+    return Red(id="test", nodos=nodos, aristas=aristas)
 
-# ── Tests de las tablas de verdad ──────────────────────────────────────────────
+class TestBitHelpers:
+    def test_has_pos(self):
+        assert has_pos("T") and has_pos("B") and not has_pos("F") and not has_pos("N")
+    def test_has_neg(self):
+        assert has_neg("F") and has_neg("B") and not has_neg("T") and not has_neg("N")
+    def test_add_pos(self):
+        assert add_pos("N")=="T"; assert add_pos("F")=="B"; assert add_pos("T")=="T"; assert add_pos("B")=="B"
+    def test_add_neg(self):
+        assert add_neg("N")=="F"; assert add_neg("T")=="B"; assert add_neg("F")=="F"; assert add_neg("B")=="B"
 
-class TestNEG:
-    def test_neg_T_es_F(self):    assert NEG_TABLE["T"] == "F"
-    def test_neg_F_es_T(self):    assert NEG_TABLE["F"] == "T"
-    def test_neg_B_es_B(self):    assert NEG_TABLE["B"] == "B"
-    def test_neg_N_es_N(self):    assert NEG_TABLE["N"] == "N"
+class TestNOT:
+    def test_forward_T_da_F(self):
+        red = _red({"id":"nodo-A","etiqueta":"A","valor":"T"},
+                   {"id":"nodo-nA","etiqueta":"¬A"},
+                   aristas_args=[{"id":"arista-1","id_origen":"nodo-A","id_destino":"nodo-nA","tipo":"not"}])
+        r = obtener_motor().calcular(red)
+        assert r.valores_nodos["nodo-nA"] == "F"
 
+    def test_backward_T_da_F(self):
+        red = _red({"id":"nodo-A","etiqueta":"A"},
+                   {"id":"nodo-nA","etiqueta":"¬A","valor":"T"},
+                   aristas_args=[{"id":"arista-1","id_origen":"nodo-A","id_destino":"nodo-nA","tipo":"not"}])
+        r = obtener_motor().calcular(red)
+        assert r.valores_nodos["nodo-A"] == "F"
+
+    def test_doble_negacion(self):
+        red = _red({"id":"nodo-A","etiqueta":"A","valor":"T"},
+                   {"id":"nodo-nA","etiqueta":"¬A"},
+                   {"id":"nodo-nnA","etiqueta":"¬¬A"},
+                   aristas_args=[
+                       {"id":"arista-1","id_origen":"nodo-A","id_destino":"nodo-nA","tipo":"not"},
+                       {"id":"arista-2","id_origen":"nodo-nA","id_destino":"nodo-nnA","tipo":"not"},
+                   ])
+        r = obtener_motor().calcular(red)
+        assert r.valores_nodos["nodo-A"]   == "T"
+        assert r.valores_nodos["nodo-nA"]  == "F"
+        assert r.valores_nodos["nodo-nnA"] == "T"
 
 class TestAND:
-    def test_T_AND_T_es_T(self):  assert AND_TABLE[("T","T")] == "T"
-    def test_T_AND_F_es_F(self):  assert AND_TABLE[("T","F")] == "F"
-    def test_F_AND_T_es_F(self):  assert AND_TABLE[("F","T")] == "F"
-    def test_F_AND_F_es_F(self):  assert AND_TABLE[("F","F")] == "F"
-    def test_N_AND_T_es_N(self):  assert AND_TABLE[("N","T")] == "N"
-    def test_T_AND_B_es_B(self):  assert AND_TABLE[("T","B")] == "B"
+    def test_and_i(self):
+        red = _red({"id":"nodo-A","etiqueta":"A","valor":"T"},
+                   {"id":"nodo-B","etiqueta":"B","valor":"T"},
+                   {"id":"nodo-AB","etiqueta":"A∧B"},
+                   aristas_args=[
+                       {"id":"arista-1","id_origen":"nodo-AB","id_destino":"nodo-A","tipo":"and"},
+                       {"id":"arista-2","id_origen":"nodo-AB","id_destino":"nodo-B","tipo":"and"},
+                   ])
+        r = obtener_motor().calcular(red)
+        assert r.valores_nodos["nodo-AB"] == "T"
 
+    def test_and_e(self):
+        red = _red({"id":"nodo-AB","etiqueta":"A∧B","valor":"T"},
+                   {"id":"nodo-A","etiqueta":"A"},
+                   {"id":"nodo-B","etiqueta":"B"},
+                   aristas_args=[
+                       {"id":"arista-1","id_origen":"nodo-AB","id_destino":"nodo-A","tipo":"and"},
+                       {"id":"arista-2","id_origen":"nodo-AB","id_destino":"nodo-B","tipo":"and"},
+                   ])
+        r = obtener_motor().calcular(red)
+        assert r.valores_nodos["nodo-A"] == "T"
+        assert r.valores_nodos["nodo-B"] == "T"
+
+    def test_and_neg_backward(self):
+        red = _red({"id":"nodo-A","etiqueta":"A","valor":"F"},
+                   {"id":"nodo-B","etiqueta":"B"},
+                   {"id":"nodo-AB","etiqueta":"A∧B"},
+                   aristas_args=[
+                       {"id":"arista-1","id_origen":"nodo-AB","id_destino":"nodo-A","tipo":"and"},
+                       {"id":"arista-2","id_origen":"nodo-AB","id_destino":"nodo-B","tipo":"and"},
+                   ])
+        r = obtener_motor().calcular(red)
+        assert has_neg(r.valores_nodos["nodo-AB"])  # A∧B must be false
 
 class TestOR:
-    def test_T_OR_T_es_T(self):   assert OR_TABLE[("T","T")] == "T"
-    def test_T_OR_F_es_T(self):   assert OR_TABLE[("T","F")] == "T"
-    def test_F_OR_F_es_F(self):   assert OR_TABLE[("F","F")] == "F"
-    def test_N_OR_T_es_T(self):   assert OR_TABLE[("N","T")] == "T"
-    def test_N_OR_N_es_N(self):   assert OR_TABLE[("N","N")] == "N"
-    def test_F_OR_B_es_B(self):   assert OR_TABLE[("F","B")] == "B"
-
-
-class TestXOR:
-    def test_T_XOR_T_es_F(self):  assert XOR_TABLE[("T","T")] == "F"  # exclusivo
-    def test_T_XOR_F_es_T(self):  assert XOR_TABLE[("T","F")] == "T"
-    def test_F_XOR_F_es_F(self):  assert XOR_TABLE[("F","F")] == "F"
-    def test_B_XOR_T_es_B(self):  assert XOR_TABLE[("B","T")] == "B"  # contradicción se propaga
-    def test_N_XOR_N_es_N(self):  assert XOR_TABLE[("N","N")] == "N"
-
-
-# ── Tests de propagación ───────────────────────────────────────────────────────
-
-def _red_cadena() -> Red:
-    """P(T) → AND → NOT"""
-    return Red(id="red-c", nodos=[
-        Nodo(id="nodo-P", etiqueta="P", tipo="premisa", propiedades={"valor": "T"}),
-        Nodo(id="nodo-A", etiqueta="A", tipo="AND",     propiedades={}),
-        Nodo(id="nodo-N", etiqueta="¬A", tipo="NOT",    propiedades={}),
-    ], aristas=[
-        Arista(id="arista-1", id_origen="nodo-P", id_destino="nodo-A"),
-        Arista(id="arista-2", id_origen="nodo-A", id_destino="nodo-N"),
-    ])
-
-
-class TestPropagacion:
-    def test_premisa_T_se_propaga_por_AND(self):
-        r = obtener_motor().calcular(_red_cadena())
-        assert r.valores_nodos["nodo-A"] == "T"
-
-    def test_NOT_invierte_T_a_F(self):
-        r = obtener_motor().calcular(_red_cadena())
-        assert r.valores_nodos["nodo-N"] == "F"
-
-    def test_premisa_no_cambia(self):
-        r = obtener_motor().calcular(_red_cadena())
-        assert r.valores_nodos["nodo-P"] == "T"
-
-    def test_converge(self):
-        r = obtener_motor().calcular(_red_cadena())
-        assert r.convergido is True
-
-    def test_red_con_premisa_F_y_OR(self):
-        red = Red(id="red-f", nodos=[
-            Nodo(id="nodo-P1", etiqueta="P1", tipo="premisa", propiedades={"valor": "F"}),
-            Nodo(id="nodo-P2", etiqueta="P2", tipo="premisa", propiedades={"valor": "T"}),
-            Nodo(id="nodo-O",  etiqueta="O",  tipo="OR",      propiedades={}),
-        ], aristas=[
-            Arista(id="arista-1", id_origen="nodo-P1", id_destino="nodo-O"),
-            Arista(id="arista-2", id_origen="nodo-P2", id_destino="nodo-O"),
-        ])
+    def test_or_i(self):
+        red = _red({"id":"nodo-A","etiqueta":"A","valor":"T"},
+                   {"id":"nodo-B","etiqueta":"B"},
+                   {"id":"nodo-AB","etiqueta":"A∨B"},
+                   aristas_args=[
+                       {"id":"arista-1","id_origen":"nodo-A","id_destino":"nodo-AB","tipo":"or"},
+                       {"id":"arista-2","id_origen":"nodo-B","id_destino":"nodo-AB","tipo":"or"},
+                   ])
         r = obtener_motor().calcular(red)
-        assert r.valores_nodos["nodo-O"] == "T"  # F OR T = T
+        assert r.valores_nodos["nodo-AB"] == "T"
 
-    def test_contradiccion_se_propaga(self):
-        red = Red(id="red-b", nodos=[
-            Nodo(id="nodo-P", etiqueta="P", tipo="premisa", propiedades={"valor": "B"}),
-            Nodo(id="nodo-O", etiqueta="O", tipo="OR",      propiedades={}),
-        ], aristas=[
-            Arista(id="arista-1", id_origen="nodo-P", id_destino="nodo-O"),
-        ])
+    def test_or_e_backward(self):
+        red = _red({"id":"nodo-AB","etiqueta":"A∨B","valor":"F"},
+                   {"id":"nodo-A","etiqueta":"A"},
+                   {"id":"nodo-B","etiqueta":"B"},
+                   aristas_args=[
+                       {"id":"arista-1","id_origen":"nodo-A","id_destino":"nodo-AB","tipo":"or"},
+                       {"id":"arista-2","id_origen":"nodo-B","id_destino":"nodo-AB","tipo":"or"},
+                   ])
         r = obtener_motor().calcular(red)
-        assert r.valores_nodos["nodo-O"] == "B"
+        assert r.valores_nodos["nodo-A"] == "F"
+        assert r.valores_nodos["nodo-B"] == "F"
 
-    def test_sin_evidencia_en_cadena(self):
-        """Si la premisa es N, los operadores quedan en N."""
-        red = Red(id="red-n", nodos=[
-            Nodo(id="nodo-P", etiqueta="P", tipo="premisa", propiedades={"valor": "N"}),
-            Nodo(id="nodo-A", etiqueta="A", tipo="AND",     propiedades={}),
-        ], aristas=[
-            Arista(id="arista-1", id_origen="nodo-P", id_destino="nodo-A"),
-        ])
+class TestUI:
+    def test_modus_ponens(self):
+        red = _red({"id":"nodo-A","etiqueta":"A","valor":"T"},
+                   {"id":"nodo-B","etiqueta":"B"},
+                   aristas_args=[{"id":"arista-1","id_origen":"nodo-A","id_destino":"nodo-B","tipo":"ui"}])
         r = obtener_motor().calcular(red)
-        assert r.valores_nodos["nodo-A"] == "N"
+        assert r.valores_nodos["nodo-B"] == "T"
 
+    def test_modus_tollens_backward(self):
+        red = _red({"id":"nodo-A","etiqueta":"A"},
+                   {"id":"nodo-B","etiqueta":"B","valor":"F"},
+                   aristas_args=[{"id":"arista-1","id_origen":"nodo-A","id_destino":"nodo-B","tipo":"ui"}])
+        r = obtener_motor().calcular(red)
+        assert r.valores_nodos["nodo-A"] == "F"
 
-class TestPasos:
-    def test_calcular_pasos_devuelve_lista(self):
-        pasos = obtener_motor().calcular_pasos(_red_cadena())
-        assert len(pasos) >= 1
-
-    def test_ultimo_paso_converge(self):
-        pasos = obtener_motor().calcular_pasos(_red_cadena())
-        assert pasos[-1].convergido is True
-
-    def test_todos_los_pasos_tienen_todos_los_nodos(self):
-        pasos = obtener_motor().calcular_pasos(_red_cadena())
-        for p in pasos:
-            assert set(p.valores_nodos.keys()) == {"nodo-P", "nodo-A", "nodo-N"}
+class TestContradiccion:
+    def test_B_se_propaga(self):
+        red = _red({"id":"nodo-A","etiqueta":"A","valor":"B"},
+                   {"id":"nodo-nA","etiqueta":"¬A"},
+                   aristas_args=[{"id":"arista-1","id_origen":"nodo-A","id_destino":"nodo-nA","tipo":"not"}])
+        r = obtener_motor().calcular(red)
+        assert r.valores_nodos["nodo-nA"] == "B"

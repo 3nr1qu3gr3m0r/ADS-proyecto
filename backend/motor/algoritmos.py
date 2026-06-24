@@ -1,260 +1,198 @@
 """
-algoritmos.py — Motor de propagación EPiC por tablas de verdad (Belnap).
+algoritmos.py — Motor granular de propagación EPiC.
 
-Cómo funciona
-─────────────
-1. Se ordenan los nodos topológicamente: primero las premisas, luego los
-   operadores en orden de dependencia (el que depende de otro va después).
-2. Se recorre la lista una sola vez. Cada nodo lee los valores que sus
-   predecesores ya calcularon en ESTE mismo recorrido y consulta la tabla.
-3. Se repite si hay ciclos, hasta que ningún valor cambie (punto fijo).
-   Para redes sin ciclos (lo normal) converge en UNA sola pasada.
+Genera UN PASO por cada regla que dispara, de modo que el frontend
+puede mostrar la propagación nodo a nodo, regla a regla.
 
-No hay Jacobi ni Gauss-Seidel: solo tablas de verdad + orden correcto.
+Orden determinista de aplicación de reglas:
+  1. AND  (∧E forward, ∧-neg backward, ∧I)
+  2. OR   (∨I forward, ∨E backward, ∨-dual)
+  3. NOT  (bidireccional)
+  4. UI   (UI+ forward, UI- backward)
 
-Tablas de verdad EPiC (Belnap, 4 valores)
-──────────────────────────────────────────
-Modelo bitpair: (bit_negativo, bit_positivo)
-  N = (0,0)  F = (1,0)  T = (0,1)  B = (1,1)
-
-  NEG(a)    = swap de bits
-  AND(a,b)  = (max(neg), min(pos))   — "tan fuerte como la entrada más débil"
-  OR(a,b)   = (min(neg), max(pos))   — "tan fuerte como la entrada más fuerte"
-  XOR(a,b)  = OR(AND(a,NEG(b)), AND(NEG(a),b))   — exclusivo
-  IMP(a,b)  = OR(NEG(a), b)          — implicación material a → b
-              requiere EXACTAMENTE 2 entradas: [antecedente, consecuente]
+Dentro de cada tipo, los nodos se procesan en orden lexicográfico por ID.
 """
-
 from __future__ import annotations
-from collections import deque
-
-from compartido.contratos import IMotorCalculoIterativo, RedInvalidaError
+from compartido.contratos import IMotorCalculoIterativo
 from compartido.modelos import Red, ResultadoPropagacion
 
-# ── Tablas de verdad ──────────────────────────────────────────────────────────
+MAX_ITERACIONES = 500
 
-NEG_TABLE: dict[str, str] = {
-    "N": "N",
-    "T": "F",
-    "F": "T",
-    "B": "B",
-}
+# ── Helpers de bitpair ────────────────────────────────────────────────────────
 
-AND_TABLE: dict[tuple[str, str], str] = {
-    ("N","N"):"N", ("N","F"):"F", ("N","T"):"N", ("N","B"):"F",
-    ("F","N"):"F", ("F","F"):"F", ("F","T"):"F", ("F","B"):"F",
-    ("T","N"):"N", ("T","F"):"F", ("T","T"):"T", ("T","B"):"B",
-    ("B","N"):"F", ("B","F"):"F", ("B","T"):"B", ("B","B"):"B",
-}
-
-OR_TABLE: dict[tuple[str, str], str] = {
-    ("N","N"):"N", ("N","F"):"N", ("N","T"):"T", ("N","B"):"T",
-    ("F","N"):"N", ("F","F"):"F", ("F","T"):"T", ("F","B"):"B",
-    ("T","N"):"T", ("T","F"):"T", ("T","T"):"T", ("T","B"):"T",
-    ("B","N"):"T", ("B","F"):"B", ("B","T"):"T", ("B","B"):"B",
-}
-
-XOR_TABLE: dict[tuple[str, str], str] = {
-    # T⊕T=F (exclusivo), B⊕cualquiera=B (contradicción se propaga)
-    ("N","N"):"N", ("N","F"):"N", ("N","T"):"N", ("N","B"):"F",
-    ("F","N"):"N", ("F","F"):"F", ("F","T"):"T", ("F","B"):"B",
-    ("T","N"):"N", ("T","F"):"T", ("T","T"):"F", ("T","B"):"B",
-    ("B","N"):"F", ("B","F"):"B", ("B","T"):"B", ("B","B"):"B",
-}
-
-IMP_TABLE: dict[tuple[str, str], str] = {
-    # IMP(a,b) = OR(NEG(a), b)   →   a → b
-    # Requiere exactamente 2 entradas: [antecedente, consecuente]
-    # Casos clásicos: T→T=T, T→F=F, F→T=T, F→F=T
-    ("T","T"):"T", ("T","F"):"F", ("T","B"):"B", ("T","N"):"N",
-    ("F","T"):"T", ("F","F"):"T", ("F","B"):"T", ("F","N"):"T",
-    ("B","T"):"T", ("B","F"):"B", ("B","B"):"B", ("B","N"):"T",
-    ("N","T"):"T", ("N","F"):"N", ("N","B"):"T", ("N","N"):"N",
-}
-
-MT_TABLE: dict[tuple[str, str], str] = {
-    # MT(p, q) — Modus Tollens como backward propagation UI⁻ del paper EPiC
-    # p = valor de la implicación (A→B)
-    # q = valor del CONSECUENTE (B)    ← conectar B directamente, NO ¬B
-    # resultado = valor del ANTECEDENTE (A)
-    #
-    # Caso clásico del paper (paso 7, Figura 2):
-    #   MT(T, F) = F  →  si A→B=T y B=F, entonces A=F
-    # Después se aplica NOT para obtener ¬A (paso 8).
-    #
-    # Derivación (Proposición 8 del paper — UI⁻):
-    # P admisible cuando IMP(P,q) ∈ Future(p) = valores refinables desde p.
-    # Future(T)={T,B}, Future(B)={B}, etc.
-    ("N","N"):"N", ("N","T"):"N", ("N","F"):"N", ("N","B"):"N",
-    ("T","N"):"F", ("T","T"):"N", ("T","F"):"F", ("T","B"):"N",
-    ("F","N"):"N", ("F","T"):"N", ("F","F"):"T", ("F","B"):"T",
-    ("B","N"):"N", ("B","T"):"N", ("B","F"):"B", ("B","B"):"T",
-}
-
-MAX_ITERACIONES = 100
+def has_pos(v: str) -> bool: return v in ("T","B")
+def has_neg(v: str) -> bool: return v in ("F","B")
+def add_pos(v: str) -> str:  return "T" if v=="N" else ("B" if v=="F" else v)
+def add_neg(v: str) -> str:  return "F" if v=="N" else ("B" if v=="T" else v)
 
 
-# ── Función de consulta de tabla ─────────────────────────────────────────────
+# ── Búsqueda del primer cambio aplicable ─────────────────────────────────────
 
-def aplicar_operador(tipo: str, entradas: list[str]) -> str:
-    """Aplica el operador consultando SOLO la tabla correspondiente."""
-    if not entradas:
-        return "N"
+def _primer_cambio(
+    valores: dict[str, str],
+    and_grupos: dict[str, list[str]],
+    or_grupos:  dict[str, list[str]],
+    not_pares:  list[tuple[str,str]],
+    ui_edges:   list[tuple[str,str]],
+    etq:        dict[str, str],
+) -> tuple[str, str, str] | None:
+    """Retorna (nodo_id, nuevo_valor, descripcion) del primer cambio posible, o None."""
 
-    if tipo == "NOT":
-        return NEG_TABLE[entradas[0]]
+    # ── AND ──────────────────────────────────────────────────────────────────
+    for cmp_id in sorted(and_grupos):
+        comp_ids = sorted(and_grupos[cmp_id])
+        cv = valores[cmp_id]
 
-    if tipo == "IMP":
-        # Requiere exactamente 2: [antecedente, consecuente]
-        return IMP_TABLE[(entradas[0], entradas[1])]
+        # ∧E forward: compound pos → cada componente pos
+        if has_pos(cv):
+            for cid in comp_ids:
+                nv = add_pos(valores[cid])
+                if nv != valores[cid]:
+                    return cid, nv, f"∧E: {etq[cmp_id]}={cv} → {etq[cid]}={nv}"
 
-    if tipo == "MT":
-        # Requiere exactamente 2: [valor de la implicación, valor del consecuente negado]
-        # Produce: valor del antecedente negado
-        return MT_TABLE[(entradas[0], entradas[1])]
+        # ∧-neg backward: algún componente neg → compound neg
+        for cid in comp_ids:
+            if has_neg(valores[cid]):
+                nv = add_neg(cv)
+                if nv != cv:
+                    return cmp_id, nv, f"∧-neg: {etq[cid]}={valores[cid]} → {etq[cmp_id]}={nv}"
 
-    if tipo == "AND":
-        resultado = entradas[0]
-        for v in entradas[1:]:
-            resultado = AND_TABLE[(resultado, v)]
-        return resultado
+        # ∧I: todos los componentes pos → compound pos
+        if all(has_pos(valores[cid]) for cid in comp_ids):
+            nv = add_pos(cv)
+            if nv != cv:
+                partes = " ∧ ".join(f"{etq[c]}=T" for c in comp_ids)
+                return cmp_id, nv, f"∧I: {partes} → {etq[cmp_id]}={nv}"
 
-    if tipo == "OR":
-        resultado = entradas[0]
-        for v in entradas[1:]:
-            resultado = OR_TABLE[(resultado, v)]
-        return resultado
+    # ── OR ───────────────────────────────────────────────────────────────────
+    for cmp_id in sorted(or_grupos):
+        comp_ids = sorted(or_grupos[cmp_id])
+        cv = valores[cmp_id]
 
-    if tipo == "XOR":
-        resultado = entradas[0]
-        for v in entradas[1:]:
-            resultado = XOR_TABLE[(resultado, v)]
-        return resultado
+        # ∨I forward: algún componente pos → compound pos
+        for cid in comp_ids:
+            if has_pos(valores[cid]):
+                nv = add_pos(cv)
+                if nv != cv:
+                    return cmp_id, nv, f"∨I: {etq[cid]}={valores[cid]} → {etq[cmp_id]}={nv}"
 
-    return "N"
+        # ∨E backward: compound neg → cada componente neg
+        if has_neg(cv):
+            for cid in comp_ids:
+                nv = add_neg(valores[cid])
+                if nv != valores[cid]:
+                    return cid, nv, f"∨E: {etq[cmp_id]}={cv} → {etq[cid]}={nv}"
 
+        # ∨-dual: todos los componentes neg → compound neg
+        if all(has_neg(valores[cid]) for cid in comp_ids):
+            nv = add_neg(cv)
+            if nv != cv:
+                return cmp_id, nv, f"∨-dual: todos neg → {etq[cmp_id]}={nv}"
 
-# ── Ordenamiento topológico ───────────────────────────────────────────────────
+    # ── NOT (bidireccional) ───────────────────────────────────────────────────
+    for id1, id2 in not_pares:
+        v1, v2 = valores[id1], valores[id2]
+        if has_pos(v1):
+            nv = add_neg(v2)
+            if nv != v2: return id2, nv, f"¬: {etq[id1]}=T → {etq[id2]}=F"
+        if has_neg(v1):
+            nv = add_pos(v2)
+            if nv != v2: return id2, nv, f"¬: {etq[id1]}=F → {etq[id2]}=T"
+        if has_pos(v2):
+            nv = add_neg(v1)
+            if nv != v1: return id1, nv, f"¬: {etq[id2]}=T → {etq[id1]}=F"
+        if has_neg(v2):
+            nv = add_pos(v1)
+            if nv != v1: return id1, nv, f"¬: {etq[id2]}=F → {etq[id1]}=T"
 
-def _orden_topologico(red: Red) -> list[str]:
-    """
-    Devuelve los IDs de nodos en orden de dependencia usando Kahn.
-    Los nodos con 0 entradas (premisas y huérfanos) van primero.
-    Si hay ciclos, los nodos del ciclo se agregan al final tal como están.
-    """
-    grado: dict[str, int] = {n.id: 0 for n in red.nodos}
-    hijos: dict[str, list[str]] = {n.id: [] for n in red.nodos}
+    # ── UI ───────────────────────────────────────────────────────────────────
+    for orig, dest in ui_edges:
+        if has_pos(valores[orig]):
+            nv = add_pos(valores[dest])
+            if nv != valores[dest]: return dest, nv, f"UI+: {etq[orig]}=T → {etq[dest]}=T"
+        if has_neg(valores[dest]):
+            nv = add_neg(valores[orig])
+            if nv != valores[orig]: return orig, nv, f"UI-: {etq[dest]}=F → {etq[orig]}=F"
 
-    for a in red.aristas:
-        if a.id_destino in grado:
-            grado[a.id_destino] += 1
-        if a.id_origen in hijos:
-            hijos[a.id_origen].append(a.id_destino)
-
-    cola  = deque(nid for nid, g in grado.items() if g == 0)
-    orden: list[str] = []
-
-    while cola:
-        nid = cola.popleft()
-        orden.append(nid)
-        for hijo in hijos[nid]:
-            grado[hijo] -= 1
-            if grado[hijo] == 0:
-                cola.append(hijo)
-
-    # Nodos en ciclos: agregar al final
-    procesados = set(orden)
-    for n in red.nodos:
-        if n.id not in procesados:
-            orden.append(n.id)
-
-    return orden
+    return None  # punto fijo
 
 
 # ── Motor ─────────────────────────────────────────────────────────────────────
 
-class MotorTablas(IMotorCalculoIterativo):
+class MotorBitpair(IMotorCalculoIterativo):
     """
-    Propaga valores usando EXCLUSIVAMENTE las tablas de verdad EPiC.
-    Procesa los nodos en orden topológico para que cada nodo lea el
-    valor ya calculado de sus predecesores en el mismo recorrido.
-    Para redes sin ciclos converge en UNA sola pasada.
+    Motor granular: genera UN paso por cada regla que dispara.
+    El historial resultante muestra la propagación nodo a nodo.
     """
 
     def calcular(self, red: Red) -> ResultadoPropagacion:
         return self.calcular_pasos(red)[-1]
 
     def calcular_pasos(self, red: Red) -> list[ResultadoPropagacion]:
-        try:
-            _verificar_red(red)
-        except RedInvalidaError as exc:
-            return [ResultadoPropagacion(
-                red_id=red.id, iteraciones=0, valores_nodos={},
-                convergido=False, error=str(exc),
-            )]
-
-        # Entradas de cada nodo: lista de IDs origen en orden de conexión
-        entradas: dict[str, list[str]] = {n.id: [] for n in red.nodos}
+        ids = {n.id for n in red.nodos}
         for a in red.aristas:
-            if a.id_destino in entradas:
-                entradas[a.id_destino].append(a.id_origen)
+            if a.id_origen not in ids or a.id_destino not in ids:
+                return [ResultadoPropagacion(red_id=red.id,iteraciones=0,valores_nodos={},
+                    convergido=False,error="Arista referencia nodo inexistente",
+                    descripcion="Error de estructura")]
 
-        # Orden de procesamiento: topológico
-        orden = _orden_topologico(red)
+        # Mapas de conectividad
+        and_grupos: dict[str, list[str]] = {}
+        or_grupos:  dict[str, list[str]] = {}
+        not_pares:  list[tuple[str,str]] = []
+        ui_edges:   list[tuple[str,str]] = []
 
-        # Estado inicial: premisas con su valor, operadores en N
-        valores: dict[str, str] = {}
-        for n in red.nodos:
-            valores[n.id] = n.valor_premisa if n.es_premisa else "N"
+        for a in red.aristas:
+            if   a.tipo == "and": and_grupos.setdefault(a.id_origen,[]).append(a.id_destino)
+            elif a.tipo == "or":  or_grupos.setdefault(a.id_destino,[]).append(a.id_origen)
+            elif a.tipo == "not": not_pares.append((a.id_origen, a.id_destino))
+            elif a.tipo == "ui":  ui_edges.append((a.id_origen, a.id_destino))
 
-        pasos: list[ResultadoPropagacion] = []
+        etq = {n.id: n.etiqueta for n in red.nodos}
 
-        # Paso 0: estado inicial (antes de consultar ninguna tabla)
-        pasos.append(ResultadoPropagacion(
+        # Estado inicial
+        valores: dict[str,str] = {
+            n.id: (n.valor if n.tiene_valor else "N") for n in red.nodos
+        }
+
+        pasos: list[ResultadoPropagacion] = [ResultadoPropagacion(
             red_id=red.id, iteraciones=0,
-            valores_nodos=dict(valores), convergido=False, error=None,
-        ))
+            valores_nodos=dict(valores),
+            convergido=False, error=None,
+            descripcion="Estado inicial",
+        )]
 
         for iteracion in range(1, MAX_ITERACIONES + 1):
-            nuevos = dict(valores)
-            cambiado = False
+            resultado = _primer_cambio(valores, and_grupos, or_grupos, not_pares, ui_edges, etq)
+            if resultado is None:
+                # Convergido: marcar el último paso
+                ultimo = pasos[-1]
+                pasos[-1] = ResultadoPropagacion(
+                    red_id=ultimo.red_id, iteraciones=ultimo.iteraciones,
+                    valores_nodos=ultimo.valores_nodos,
+                    convergido=True, error=None, descripcion=ultimo.descripcion,
+                )
+                break
 
-            for nid in orden:
-                nodo = next(n for n in red.nodos if n.id == nid)
-                if nodo.es_premisa:
-                    continue
-
-                # Lee los valores MÁS RECIENTES (ya actualizados en esta misma pasada)
-                vals_entrada = [nuevos[src] for src in entradas[nid]]
-                nuevo_valor  = aplicar_operador(nodo.tipo, vals_entrada)
-
-                if nuevo_valor != valores[nid]:
-                    cambiado = True
-                nuevos[nid] = nuevo_valor
-
-            valores = nuevos
-            convergido = not cambiado
+            nid, nuevo_valor, descripcion = resultado
+            valores[nid] = nuevo_valor
 
             pasos.append(ResultadoPropagacion(
                 red_id=red.id, iteraciones=iteracion,
                 valores_nodos=dict(valores),
-                convergido=convergido, error=None,
+                convergido=False, error=None,
+                descripcion=descripcion,
             ))
-
-            if convergido:
-                break
+        else:
+            # Máximo de iteraciones alcanzado
+            pasos[-1] = ResultadoPropagacion(
+                red_id=pasos[-1].red_id, iteraciones=pasos[-1].iteraciones,
+                valores_nodos=pasos[-1].valores_nodos,
+                convergido=True, error=None, descripcion=pasos[-1].descripcion,
+            )
 
         return pasos
 
 
-def _verificar_red(red: Red) -> None:
-    ids = {n.id for n in red.nodos}
-    for a in red.aristas:
-        if a.id_origen not in ids:
-            raise RedInvalidaError(f'Nodo origen "{a.id_origen}" no existe.')
-        if a.id_destino not in ids:
-            raise RedInvalidaError(f'Nodo destino "{a.id_destino}" no existe.')
-
-
-def obtener_motor() -> MotorTablas:
-    return MotorTablas()
+def obtener_motor() -> MotorBitpair:
+    return MotorBitpair()

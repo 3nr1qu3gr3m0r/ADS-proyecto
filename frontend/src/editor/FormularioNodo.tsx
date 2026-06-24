@@ -1,168 +1,121 @@
 /**
- * FormularioNodo.tsx — Formulario para agregar un nodo.
+ * FormularioNodo.tsx — Constructor de nodos para fórmulas compuestas.
  *
- * Si el usuario marca "Premisa": solo puede asignar un valor T/F/B/N.
- * Si NO es premisa: solo puede elegir un operador AND/OR/XOR/NOT.
- * Esto refleja exactamente el dominio EPiC del proyecto.
+ * Solo permite usar:
+ *   - Botones con las variables ya declaradas (A, B, P, Q…)
+ *   - Botones de operadores lógicos (¬, ∧, ∨, →, ↔, (, ))
+ *
+ * No hay campo de texto libre — la fórmula se construye haciendo clic.
+ * Los nodos compuestos NO tienen valor asignado; el valor lo infiere el motor.
  */
+import { useState } from 'react';
+import type { Nodo, Variable } from '../compartido/tipos';
+import { COLOR_BELNAP } from '../compartido/constantes';
 
-import { useState, useRef } from 'react';
-import type { Nodo, ValorBelnap, OperadorLogico } from '../compartido/tipos';
-import { COLOR_BELNAP, DESC_BELNAP } from '../compartido/constantes';
-
-const SIMBOLOS = ['¬', '∧', '∨', '→', '↔', '∴', '⊥', '⊤', '∀', '∃'];
-
-const VALORES: ValorBelnap[]   = ['T', 'F', 'B', 'N'];
-const OPERADORES: { op: OperadorLogico; desc: string }[] = [
-  { op: 'OR',  desc: 'OR  — verdadero si al menos 1 entrada es T' },
-  { op: 'AND', desc: 'AND — verdadero si TODAS las entradas son T' },
-  { op: 'XOR', desc: 'XOR — verdadero si EXACTAMENTE 1 entrada es T' },
-  { op: 'MT',  desc: 'MT — Modus Tollens: de (A→B) y ¬B produce ¬A  (2 entradas en orden)' },
-  { op: 'IMP', desc: 'IMP — Implicación a→b  (2 entradas: antecedente, consecuente)' },
-  { op: 'NOT', desc: 'NOT — invierte la única entrada (requiere 1 entrada)' },
-];
+const OPERADORES = ['¬', '∧', '∨', '→', '↔', '(', ')'];
 
 interface Props {
+  variables: Variable[];
   cantidadNodos: number;
   onAgregar: (nodo: Nodo) => void;
 }
 
-export function FormularioNodo({ cantidadNodos, onAgregar }: Props) {
-  const [etiqueta,    setEtiqueta]    = useState('');
-  const [esPremisa,   setEsPremisa]   = useState(false);
-  const [valor,       setValor]       = useState<ValorBelnap>('T');
-  const [operador,    setOperador]    = useState<OperadorLogico>('OR');
-  const inputRef = useRef<HTMLInputElement>(null);
+export function FormularioNodo({ variables, cantidadNodos, onAgregar }: Props) {
+  const [formula, setFormula] = useState('');
 
-  const insertar = (sym: string) => {
-    const el = inputRef.current;
-    if (!el) return;
-    const s   = el.selectionStart ?? etiqueta.length;
-    const e   = el.selectionEnd   ?? etiqueta.length;
-    const nuevo = etiqueta.slice(0, s) + sym + etiqueta.slice(e);
-    setEtiqueta(nuevo);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(s + sym.length, s + sym.length);
-    });
-  };
+  const append = (texto: string) => setFormula(f => f + texto);
+  const borrar  = () => setFormula(f => {
+    // Borrar último "token": si termina en un nombre de variable multi-char, borrarlo entero
+    // Primero intentar quitar la última variable (puede ser multi-char como "P1")
+    for (const v of variables.sort((a,b) => b.nombre.length - a.nombre.length)) {
+      if (f.endsWith(v.nombre)) return f.slice(0, -v.nombre.length);
+    }
+    return f.slice(0, -1);
+  });
+  const limpiar = () => setFormula('');
 
   const submit = () => {
-    const idx    = cantidadNodos + 1;
-    const label  = etiqueta.trim() || (esPremisa ? `P${idx}` : `N${idx}`);
-    const nodo: Nodo = esPremisa
-      ? {
-          id: `nodo-${String(idx).padStart(3, '0')}`,
-          etiqueta: label,
-          tipo: 'premisa',
-          propiedades: { valor },
-          posicion: { x: 80 + (idx % 3) * 240, y: 100 + Math.floor(idx / 3) * 180 },
-        }
-      : {
-          id: `nodo-${String(idx).padStart(3, '0')}`,
-          etiqueta: label,
-          tipo: operador,
-          propiedades: {},
-          posicion: { x: 80 + (idx % 3) * 240, y: 100 + Math.floor(idx / 3) * 180 },
-        };
+    if (!formula.trim()) return;
+    const idx = cantidadNodos + 1;
+    const nodo: Nodo = {
+      id: `nodo-${String(idx).padStart(3, '0')}`,
+      etiqueta: formula.trim(),
+      valor: undefined,   // el motor lo infiere
+      posicion: { x: 80 + (idx % 4) * 200, y: 300 + Math.floor(idx / 4) * 180 },
+    };
     onAgregar(nodo);
-    setEtiqueta('');
+    setFormula('');
   };
+
+  if (variables.length === 0) {
+    return (
+      <div style={{ fontSize: 12, color: '#475569', textAlign: 'center', padding: 8 }}>
+        Primero declara al menos una variable (panel de arriba).
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-      {/* Etiqueta */}
-      <label style={labelSt}>Etiqueta</label>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 2 }}>
-        {SIMBOLOS.map(s => (
-          <button key={s} onClick={() => insertar(s)} style={btnSymSt}>{s}</button>
+      {/* Vista previa de la fórmula */}
+      <div style={{
+        background: '#0f1f3d', borderRadius: 10, padding: '10px 14px',
+        minHeight: 44, display: 'flex', alignItems: 'center',
+        border: formula ? '1px solid #6366f1' : '1px solid #1e3a5f',
+      }}>
+        {formula
+          ? <span style={{ fontSize: 18, color: 'white', fontWeight: 700, letterSpacing: 1 }}>{formula}</span>
+          : <span style={{ fontSize: 13, color: '#475569' }}>Haz clic en variables y operadores…</span>
+        }
+      </div>
+
+      {/* Botones de variables declaradas */}
+      <label style={lbl}>Variables declaradas</label>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {variables.map(v => (
+          <button key={v.nombre} onClick={() => append(v.nombre)} style={{
+            background: '#162849',
+            border: `2px solid ${COLOR_BELNAP[v.valor]}`,
+            color: 'white', borderRadius: 8, padding: '6px 14px',
+            cursor: 'pointer', fontSize: 16, fontWeight: 700,
+          }}>
+            {v.nombre}
+            <span style={{ fontSize: 9, color: COLOR_BELNAP[v.valor], marginLeft: 4 }}>{v.valor}</span>
+          </button>
         ))}
       </div>
-      <input
-        ref={inputRef}
-        value={etiqueta}
-        onChange={e => setEtiqueta(e.target.value)}
-        placeholder={esPremisa ? 'ej. P, Hipótesis A' : 'ej. P ∧ Q, Conclusión'}
-        style={inputSt}
-        onKeyDown={e => e.key === 'Enter' && submit()}
-      />
 
-      {/* Toggle premisa / operador */}
-      <div style={{ display: 'flex', background: '#0f1f3d', borderRadius: 8, padding: 3 }}>
-        <button
-          onClick={() => setEsPremisa(true)}
-          style={{ flex: 1, background: esPremisa ? '#f59e0b' : 'transparent', border: 'none',
-            color: esPremisa ? '#0f1f3d' : '#94a3b8', borderRadius: 6, padding: '6px 0',
-            fontSize: 12, fontWeight: esPremisa ? 700 : 400, cursor: 'pointer' }}>
-          ★ Premisa
-        </button>
-        <button
-          onClick={() => setEsPremisa(false)}
-          style={{ flex: 1, background: !esPremisa ? '#6366f1' : 'transparent', border: 'none',
-            color: !esPremisa ? 'white' : '#94a3b8', borderRadius: 6, padding: '6px 0',
-            fontSize: 12, fontWeight: !esPremisa ? 700 : 400, cursor: 'pointer' }}>
-          ⊕ Operador
-        </button>
+      {/* Botones de operadores */}
+      <label style={lbl}>Operadores</label>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {OPERADORES.map(op => (
+          <button key={op} onClick={() => append(op)} style={{
+            background: '#1e3a5f', border: 'none', color: '#93c5fd',
+            borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 18,
+          }}>{op}</button>
+        ))}
+        <button onClick={borrar} disabled={!formula}
+          style={{ background: '#2d1b1b', border: 'none', color: '#f87171',
+            borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 14,
+            opacity: formula ? 1 : 0.4 }}>⌫</button>
+        <button onClick={limpiar} disabled={!formula}
+          style={{ background: '#2d1b1b', border: 'none', color: '#f87171',
+            borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 12,
+            opacity: formula ? 1 : 0.4 }}>✕ Limpiar</button>
       </div>
 
-      {/* Premisa: selector de valor T/F/B/N */}
-      {esPremisa && (
-        <>
-          <label style={labelSt}>Valor evidencial de la premisa</label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-            {VALORES.map(v => (
-              <button key={v} onClick={() => setValor(v)} style={{
-                background: valor === v ? COLOR_BELNAP[v] : '#0f1f3d',
-                border: `2px solid ${valor === v ? COLOR_BELNAP[v] : '#1e3a5f'}`,
-                color: valor === v ? 'white' : '#94a3b8',
-                borderRadius: 8, padding: '8px 4px', cursor: 'pointer',
-                fontSize: 12, fontWeight: valor === v ? 700 : 400,
-              }}>
-                <span style={{ fontSize: 16, display: 'block' }}>{v}</span>
-                <span style={{ fontSize: 10 }}>{DESC_BELNAP[v]}</span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* Operador: selector AND/OR/XOR/NOT */}
-      {!esPremisa && (
-        <>
-          <label style={labelSt}>Operador lógico</label>
-          {OPERADORES.map(({ op, desc }) => (
-            <button key={op} onClick={() => setOperador(op)} style={{
-              background: operador === op ? '#6366f1' : '#0f1f3d',
-              border: `1px solid ${operador === op ? '#6366f1' : '#1e3a5f'}`,
-              color: 'white', borderRadius: 8, padding: '8px 10px',
-              cursor: 'pointer', textAlign: 'left', fontSize: 12,
-              fontWeight: operador === op ? 700 : 400,
-            }}>
-              <strong style={{ color: operador === op ? 'white' : '#818cf8' }}>{op}</strong>
-              <span style={{ color: '#94a3b8', marginLeft: 6 }}>{desc.split('—')[1]?.trim()}</span>
-            </button>
-          ))}
-        </>
-      )}
-
-      <button onClick={submit} style={btnPriSt}>
-        + Agregar {esPremisa ? 'premisa' : 'operador'}
+      <button onClick={submit} disabled={!formula.trim()} style={{
+        ...btnPri, opacity: !formula.trim() ? 0.4 : 1,
+      }}>
+        + Agregar nodo "{formula || '…'}"
       </button>
     </div>
   );
 }
 
-const labelSt: React.CSSProperties = { fontSize: 12, color: '#94a3b8' };
-const inputSt: React.CSSProperties = {
-  background: '#0f1f3d', border: '1px solid #1e3a5f', color: 'white',
-  borderRadius: 8, padding: '7px 10px', fontSize: 13, outline: 'none', width: '100%',
-};
-const btnSymSt: React.CSSProperties = {
-  background: '#1e3a5f', border: 'none', color: '#93c5fd',
-  borderRadius: 6, padding: '3px 8px', fontSize: 14, cursor: 'pointer',
-};
-const btnPriSt: React.CSSProperties = {
+const lbl: React.CSSProperties = { fontSize: 12, color: '#94a3b8' };
+const btnPri: React.CSSProperties = {
   background: '#6366f1', border: 'none', color: 'white',
   borderRadius: 8, padding: '9px 0', fontSize: 13, fontWeight: 'bold', cursor: 'pointer',
 };
